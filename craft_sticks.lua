@@ -28,6 +28,9 @@ local input = {
     list = function()
         return modem.callRemote(inputName, "list")
     end,
+    pullItems = function(...)
+        return modem.callRemote(inputName, "pullItems", ...)
+    end,
     pushItems = function(...)
         return modem.callRemote(inputName, "pushItems", ...)
     end,
@@ -63,25 +66,35 @@ local function run()
             print("No oak logs left")
             return
         end
-        assert(input.pushItems(turtleName, sourceSlot, 1, 1) == 1,
-            "Could not transfer oak log into turtle slot 1")
-        expectItem(1, "minecraft:oak_log", 1)
+        local received = input.pushItems(turtleName, sourceSlot, 64, 1)
+        assert(received > 0, "Could not transfer oak logs into turtle slot 1")
+        expectItem(1, "minecraft:oak_log", received)
 
-        turtle.select(16)
-        assert(turtle.craft(1), "Could not craft oak planks; check crafting upgrade")
-        expectItem(16, "minecraft:oak_planks", 4)
-
-        -- Crafting grid: two planks each in slots 1 and 5.
-        assert(turtle.transferTo(1, 2), "Could not move planks to slot 1")
-        assert(turtle.transferTo(5, 2), "Could not move planks to slot 5")
-        assert(turtle.craft(2), "Could not craft sticks")
-        expectItem(16, "minecraft:stick", 8)
-
-        while turtle.getItemCount(16) > 0 do
-            assert(output.pullItems(turtleName, 16) > 0,
-                "Output blocked/full; remaining sticks kept in slot 16")
+        -- Keep each crafting result within one stack. Return excess logs first.
+        local logs = math.min(received, 16)
+        while turtle.getItemCount(1) > logs do
+            assert(input.pullItems(turtleName, 1, turtle.getItemCount(1) - logs) > 0,
+                "Could not return excess logs; logs kept in slot 1")
         end
-        total = total + 8
+        turtle.select(16)
+        assert(turtle.craft(logs), "Could not craft oak planks; check crafting upgrade")
+        expectItem(16, "minecraft:oak_planks", logs * 4)
+
+        -- Two vertical stacks of planks; produce at most 64 sticks at a time.
+        assert(turtle.transferTo(1, logs * 2), "Could not move planks to slot 1")
+        assert(turtle.transferTo(5, logs * 2), "Could not move planks to slot 5")
+        local recipesLeft = logs * 2
+        while recipesLeft > 0 do
+            local recipes = math.min(recipesLeft, 16)
+            assert(turtle.craft(recipes), "Could not craft sticks")
+            expectItem(16, "minecraft:stick", recipes * 4)
+            while turtle.getItemCount(16) > 0 do
+                assert(output.pullItems(turtleName, 16) > 0,
+                    "Output blocked/full; remaining sticks kept in slot 16")
+            end
+            recipesLeft = recipesLeft - recipes
+            total = total + recipes * 4
+        end
         print("Sticks output: " .. total)
     end
 end
