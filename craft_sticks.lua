@@ -1,15 +1,42 @@
 -- Requires a crafting table upgrade and an empty turtle inventory.
 -- Connect an enabled wired modem at the front; expose the turtle on its network.
--- Input/output inventories must be available as left/back peripherals.
+-- Connect the left/back inventories to the same wired network and enable them.
+-- Usage: craft_sticks <left inventory network name> <back inventory network name>
 assert(turtle and turtle.craft, "A crafting turtle is required")
 assert(peripheral.hasType("front", "modem"), "No modem at the front")
 local modem = peripheral.wrap("front")
 assert(not modem.isWireless(), "A wired modem is required")
 local turtleName = assert(modem.getNameLocal(), "Enable the front modem to expose this turtle")
-assert(peripheral.hasType("left", "inventory"), "No inventory on the left")
-assert(peripheral.hasType("back", "inventory"), "No inventory at the back")
-local input = peripheral.wrap("left")
-local output = peripheral.wrap("back")
+local inputName, outputName = ...
+if not inputName or not outputName then
+    print("Usage: craft_sticks <input name> <output name>")
+    print("Turtle: " .. turtleName)
+    print("Inventories on the front modem network:")
+    for _, name in ipairs(modem.getNamesRemote()) do
+        if modem.hasTypeRemote(name, "inventory") then
+            print("  " .. name)
+        end
+    end
+    return
+end
+assert(inputName ~= outputName, "Input and output must be different inventories")
+assert(inputName ~= turtleName and outputName ~= turtleName,
+    "Input/output must not be the turtle itself")
+assert(modem.hasTypeRemote(inputName, "inventory"), "Input not found on front modem network")
+assert(modem.hasTypeRemote(outputName, "inventory"), "Output not found on front modem network")
+local input = {
+    list = function()
+        return modem.callRemote(inputName, "list")
+    end,
+    pushItems = function(...)
+        return modem.callRemote(inputName, "pushItems", ...)
+    end,
+}
+local output = {
+    pullItems = function(...)
+        return modem.callRemote(outputName, "pullItems", ...)
+    end,
+}
 for slot = 1, 16 do
     assert(turtle.getItemCount(slot) == 0, "Empty the turtle inventory first")
 end
