@@ -1,21 +1,21 @@
 -- Requires a crafting table upgrade and an empty turtle inventory.
--- Put oak logs in the left inventory. Output goes behind the initial heading.
+-- Connect an enabled wired modem at the front; expose the turtle on its network.
+-- Input/output inventories must be available as left/back peripherals.
 assert(turtle and turtle.craft, "A crafting turtle is required")
+assert(peripheral.hasType("front", "modem"), "No modem at the front")
+local modem = peripheral.wrap("front")
+assert(not modem.isWireless(), "A wired modem is required")
+local turtleName = assert(modem.getNameLocal(), "Enable the front modem to expose this turtle")
 assert(peripheral.hasType("left", "inventory"), "No inventory on the left")
+assert(peripheral.hasType("back", "inventory"), "No inventory at the back")
+local input = peripheral.wrap("left")
+local output = peripheral.wrap("back")
 for slot = 1, 16 do
     assert(turtle.getItemCount(slot) == 0, "Empty the turtle inventory first")
 end
 
-local heading = 0
 local selected = turtle.getSelectedSlot()
 local total = 0
-
-local function face(target)
-    while heading ~= target do
-        assert(turtle.turnRight(), "Could not turn")
-        heading = (heading + 1) % 4
-    end
-end
 
 local function expectItem(slot, name, count)
     local item = turtle.getItemDetail(slot)
@@ -25,21 +25,20 @@ end
 
 local function run()
     while true do
-        face(3) -- Original left.
-        turtle.select(1)
-        if not turtle.suck(1) then
-            print("Input empty or unavailable")
+        local sourceSlot
+        for slot, item in pairs(input.list()) do
+            if item.name == "minecraft:oak_log" then
+                sourceSlot = slot
+                break
+            end
+        end
+        if not sourceSlot then
+            print("No oak logs left")
             return
         end
-
-        local item = turtle.getItemDetail(1)
-        if not item or item.name ~= "minecraft:oak_log" then
-            -- Do not craft other wood types or unrelated items.
-            local returned = turtle.drop()
-            assert(returned and turtle.getItemCount(1) == 0,
-                "Unexpected input; could not return it (kept in slot 1)")
-            error("Input contains a non-oak-log item; remove it and run again", 0)
-        end
+        assert(input.pushItems(turtleName, sourceSlot, 1, 1) == 1,
+            "Could not transfer oak log into turtle slot 1")
+        expectItem(1, "minecraft:oak_log", 1)
 
         turtle.select(16)
         assert(turtle.craft(1), "Could not craft oak planks; check crafting upgrade")
@@ -51,19 +50,16 @@ local function run()
         assert(turtle.craft(2), "Could not craft sticks")
         expectItem(16, "minecraft:stick", 8)
 
-        face(2) -- Original back. Without an inventory, drop into the world.
         while turtle.getItemCount(16) > 0 do
-            assert(turtle.drop(), "Output blocked/full; sticks kept in slot 16")
+            assert(output.pullItems(turtleName, 16) > 0,
+                "Output blocked/full; remaining sticks kept in slot 16")
         end
         total = total + 8
         print("Sticks output: " .. total)
-        face(0)
     end
 end
 
 local ok, err = pcall(run)
--- Restore the starting heading even after a crafting/output error.
-face(0)
 turtle.select(selected)
 if not ok then
     error(err, 0)
