@@ -55,35 +55,35 @@ end
 
 local function run()
     while true do
-        local sourceSlot
+        -- Gather up to one stack, including planks spread across input slots.
+        local received = 0
         for slot, item in pairs(input.list()) do
-            if item.name == "minecraft:oak_log" then
-                sourceSlot = slot
-                break
+            if item.name == "minecraft:oak_planks" and received < 64 then
+                received = received + input.pushItems(turtleName, slot, 64 - received, 1)
             end
         end
-        if not sourceSlot then
-            print("No oak logs left")
+        if received == 0 then
+            print("No oak planks available")
             return
         end
-        local received = input.pushItems(turtleName, sourceSlot, 64, 1)
-        assert(received > 0, "Could not transfer oak logs into turtle slot 1")
-        expectItem(1, "minecraft:oak_log", received)
+        expectItem(1, "minecraft:oak_planks", received)
 
-        -- Keep each crafting result within one stack. Return excess logs first.
-        local logs = math.min(received, 16)
-        while turtle.getItemCount(1) > logs do
-            assert(input.pullItems(turtleName, 1, turtle.getItemCount(1) - logs) > 0,
-                "Could not return excess logs; logs kept in slot 1")
+        -- Sticks require pairs of planks. Return an unmatched plank.
+        if received % 2 == 1 then
+            assert(input.pullItems(turtleName, 1, 1) == 1,
+                "Could not return unmatched plank; planks kept in slot 1")
+            received = received - 1
         end
-        turtle.select(16)
-        assert(turtle.craft(logs), "Could not craft oak planks; check crafting upgrade")
-        expectItem(16, "minecraft:oak_planks", logs * 4)
+        if received == 0 then
+            print("Need at least two oak planks")
+            return
+        end
 
-        -- Two vertical stacks of planks; produce at most 64 sticks at a time.
-        assert(turtle.transferTo(1, logs * 2), "Could not move planks to slot 1")
-        assert(turtle.transferTo(5, logs * 2), "Could not move planks to slot 5")
-        local recipesLeft = logs * 2
+        local recipesLeft = received / 2
+        turtle.select(1)
+        assert(turtle.transferTo(5, recipesLeft), "Could not move planks to slot 5")
+        turtle.select(16)
+        -- Produce at most 64 sticks at a time to keep the output in slot 16.
         while recipesLeft > 0 do
             local recipes = math.min(recipesLeft, 16)
             assert(turtle.craft(recipes), "Could not craft sticks")
